@@ -29,6 +29,17 @@
       border-right: 1px solid #333;
       display: flex;
       flex-direction: column;
+      position: relative;
+      transition: transform 0.3s ease;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #333;
     }
 
     .new-chat-btn {
@@ -43,12 +54,9 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      transition: 0.3s;
     }
 
-    .new-chat-btn:hover {
-      background: #3A3A3A;
-    }
+    .new-chat-btn:hover { background: #3A3A3A; }
 
     .chat-history {
       flex: 1;
@@ -72,7 +80,30 @@
       background: #2A2A2A;
     }
 
-    /* Main Chat Area */
+    /* Mobile Sidebar Fixes */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 90;
+        display: none;
+      }
+      .overlay.show { display: block; }
+    }
+
+    /* Main Chat */
     .main-chat {
       flex: 1;
       display: flex;
@@ -107,18 +138,8 @@
       font-size: 16px;
     }
 
-    .bot { 
-      align-self: flex-start; 
-      background: #1F1F1F; 
-      border-bottom-left-radius: 6px;
-    }
-
-    .user { 
-      align-self: flex-end; 
-      background: linear-gradient(135deg, #10A37F, #0E8A6B);
-      color: white;
-      border-bottom-right-radius: 6px;
-    }
+    .bot { align-self: flex-start; background: #1F1F1F; border-bottom-left-radius: 6px; }
+    .user { align-self: flex-end; background: linear-gradient(135deg, #10A37F, #0E8A6B); color: white; border-bottom-right-radius: 6px; }
 
     .input-area {
       padding: 20px 40px 30px;
@@ -158,23 +179,25 @@
       font-size: 22px;
       cursor: pointer;
     }
-
-    /* Mobile */
-    @media (max-width: 768px) {
-      .sidebar { width: 100%; position: absolute; z-index: 10; height: 100%; transform: translateX(-100%); transition: 0.3s; }
-      .sidebar.open { transform: translateX(0); }
-      .main-chat { width: 100%; }
-    }
   </style>
 </head>
 <body>
 
   <div class="app">
+    <!-- Overlay for mobile -->
+    <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div style="font-size:20px;">😂 BhaiGPT</div>
+        <span style="font-size:24px; cursor:pointer;" onclick="closeSidebar()">✕</span>
+      </div>
+
       <div class="new-chat-btn" onclick="newChat()">
         <span>+</span> Naya Chat
       </div>
+
       <div class="chat-history" id="chatHistory"></div>
     </div>
 
@@ -185,7 +208,7 @@
           <span style="font-size:28px; cursor:pointer;" onclick="toggleSidebar()">☰</span>
           <span id="chatTitle">BhaiGPT</span>
         </div>
-        <div style="font-size:22px;">😂</div>
+        <div style="font-size:22px;">🤖</div>
       </div>
 
       <div class="chat-box" id="chatBox"></div>
@@ -207,7 +230,9 @@
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
     const chatHistory = document.getElementById('chatHistory');
-    const chatTitle = document.getElementById('chatTitle');
+    const chatTitleEl = document.getElementById('chatTitle');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
 
     const GROQ_API_KEY = "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";   // ←←← APNI GROQ KEY YAHAN DAALO
 
@@ -215,7 +240,7 @@
 
     const SYSTEM_PROMPT = `Tu ek bahut mazedaar, desi, funny Hinglish AI hai. Naam hai BhaiGPT. 
     Har jawab mein thoda swag, masti aur emoji daal. 
-    Agar koi puche ki tujhe kisne banaya, who created you, maker kaun hai etc. toh bolna: "Mujhe banaya hai Behzad Arif ne ❤️".`;
+    Agar koi puche ki tujhe kisne banaya, who created you etc. toh bolna: "Mujhe banaya hai Behzad Arif ne ❤️".`;
 
     function saveChats() {
       localStorage.setItem('bhaigpt_chats', JSON.stringify(chats));
@@ -226,29 +251,25 @@
     }
 
     function createNewChat() {
+      closeSidebar();
       const chatId = generateChatId();
-      chats[chatId] = {
-        title: "Naya Chat",
-        messages: []
-      };
+      chats[chatId] = { title: "Naya Chat", messages: [] };
       currentChatId = chatId;
       saveChats();
       renderHistory();
       loadChat(chatId);
-      return chatId;
     }
 
     function loadChat(chatId) {
+      closeSidebar();
       currentChatId = chatId;
       chatBox.innerHTML = '';
       const chat = chats[chatId];
-
-      chatTitle.textContent = chat.title || "BhaiGPT";
+      chatTitleEl.textContent = chat.title || "BhaiGPT";
 
       chat.messages.forEach(msg => {
         addMessage(msg.text, msg.sender, false);
       });
-
       renderHistory();
     }
 
@@ -263,10 +284,9 @@
         chats[currentChatId].messages.push({ text, sender });
         saveChats();
 
-        // Auto title generate if first message
         if (chats[currentChatId].messages.length === 1 && sender === 'user') {
           chats[currentChatId].title = text.substring(0, 35) + (text.length > 35 ? '...' : '');
-          chatTitle.textContent = chats[currentChatId].title;
+          chatTitleEl.textContent = chats[currentChatId].title;
           saveChats();
           renderHistory();
         }
@@ -287,26 +307,19 @@
       try {
         const res = await fetch(API_URL, {
           method: "POST",
-          headers: { 
-            "Authorization": `Bearer ${GROQ_API_KEY}`,
-            "Content-Type": "application/json" 
-          },
+          headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "llama-3.3-70b-versatile",
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: userMessage }
-            ],
+            messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: userMessage }],
             temperature: 0.9,
             max_tokens: 800
           })
         });
-
         if (!res.ok) throw new Error();
         const data = await res.json();
         return data.choices[0].message.content;
       } catch (e) {
-        return "Arre bhai, API mein dikkat aa rahi hai. Key check kar 😅";
+        return "Arre bhai, API mein dikkat aa rahi hai 😅";
       }
     }
 
@@ -318,24 +331,44 @@
       userInput.value = "";
 
       const typing = showTyping();
-
       const reply = await sendToGroq(text);
-
       if (typing.parentNode) typing.parentNode.removeChild(typing);
-
       addMessage(reply, 'bot');
     }
 
     function renderHistory() {
       chatHistory.innerHTML = '';
-      Object.keys(chats).reverse().forEach(chatId => {
+      Object.keys(chats).sort().reverse().forEach(chatId => {
         const chat = chats[chatId];
         const item = document.createElement('div');
         item.className = `history-item ${chatId === currentChatId ? 'active' : ''}`;
         item.textContent = chat.title;
+        
+        // Rename on long press (mobile) or right click (desktop)
+        item.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          renameChat(chatId);
+        });
+        item.addEventListener('touchstart', () => {
+          item.longPressTimer = setTimeout(() => renameChat(chatId), 600);
+        });
+        item.addEventListener('touchend', () => clearTimeout(item.longPressTimer));
+        
         item.onclick = () => loadChat(chatId);
         chatHistory.appendChild(item);
       });
+    }
+
+    function renameChat(chatId) {
+      const newTitle = prompt("Naya title daalo:", chats[chatId].title);
+      if (newTitle && newTitle.trim() !== "") {
+        chats[chatId].title = newTitle.trim();
+        saveChats();
+        renderHistory();
+        if (currentChatId === chatId) {
+          chatTitleEl.textContent = newTitle.trim();
+        }
+      }
     }
 
     function newChat() {
@@ -343,7 +376,13 @@
     }
 
     function toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('open');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('show');
+    }
+
+    function closeSidebar() {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('show');
     }
 
     // Event Listeners
@@ -352,13 +391,12 @@
       if (e.key === 'Enter') sendMessage();
     });
 
-    // Initialize App
+    // Initialize
     window.onload = () => {
       if (Object.keys(chats).length === 0) {
         createNewChat();
       } else {
-        // Load the most recent chat
-        const latestChatId = Object.keys(chats).sort().pop();
+        const latestChatId = Object.keys(chats).sort().reverse()[0];
         loadChat(latestChatId);
       }
       renderHistory();
