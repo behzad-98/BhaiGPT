@@ -53,6 +53,8 @@
       gap: 10px;
     }
 
+    .new-chat-btn:hover { background: #3A3A3A; }
+
     .chat-history {
       flex: 1;
       overflow-y: auto;
@@ -68,18 +70,31 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      transition: 0.2s;
     }
 
-    .history-item:hover, .history-item.active { background: #2A2A2A; }
+    .history-item:hover, .history-item.active {
+      background: #2A2A2A;
+    }
 
     @media (max-width: 768px) {
-      .sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); }
+      .sidebar {
+        position: fixed;
+        left: 0; top: 0; height: 100%;
+        transform: translateX(-100%);
+      }
       .sidebar.open { transform: translateX(0); }
-      .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 90; display: none; }
+      .overlay {
+        position: fixed; top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.75);
+        z-index: 90;
+        display: none;
+      }
       .overlay.show { display: block; }
     }
 
-    /* Main Chat */
+    /* Main Chat Area */
     .main-chat { flex: 1; display: flex; flex-direction: column; }
 
     .header {
@@ -89,6 +104,7 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid #333;
+      font-weight: 600;
     }
 
     .chat-box {
@@ -109,31 +125,40 @@
       font-size: 16px;
     }
 
-    .bot { align-self: flex-start; background: #1F1F1F; border-bottom-left-radius: 6px; }
-    .user { align-self: flex-end; background: linear-gradient(135deg, #10A37F, #0E8A6B); color: white; border-bottom-right-radius: 6px; }
+    .bot { 
+      align-self: flex-start; 
+      background: #1F1F1F; 
+      border-bottom-left-radius: 6px;
+    }
 
-    /* Code Block Styling */
+    .user { 
+      align-self: flex-end; 
+      background: linear-gradient(135deg, #10A37F, #0E8A6B);
+      color: white;
+      border-bottom-right-radius: 6px;
+    }
+
+    /* Code Block */
     .code-block {
       background: #1E1E1E;
       border-radius: 12px;
       padding: 16px;
       margin: 12px 0;
       position: relative;
-      max-width: 100%;
       overflow-x: auto;
     }
 
     .code-block pre {
       margin: 0;
       font-family: 'Courier New', monospace;
-      font-size: 14.5px;
+      font-size: 14.8px;
       line-height: 1.5;
     }
 
     .copy-btn {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 12px;
+      right: 12px;
       background: #333;
       color: #fff;
       border: none;
@@ -153,12 +178,10 @@
       max-width: 780px;
       margin: 0 auto;
       position: relative;
-      display: flex;
-      gap: 10px;
     }
 
     input {
-      flex: 1;
+      width: 100%;
       padding: 18px 24px;
       border: 1px solid #444;
       border-radius: 9999px;
@@ -169,6 +192,10 @@
     }
 
     button {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
       background: #10A37F;
       color: white;
       border: none;
@@ -177,24 +204,6 @@
       border-radius: 50%;
       font-size: 22px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .mic-btn {
-      background: #ff4444;
-    }
-
-    .mic-btn.recording {
-      background: #ff0000;
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.12); }
-      100% { transform: scale(1); }
     }
   </style>
 </head>
@@ -227,8 +236,7 @@
 
       <div class="input-area">
         <div class="input-wrapper">
-          <input type="text" id="userInput" placeholder="Bhai, kuch pooch na ya bol...">
-          <button id="micBtn" class="mic-btn">🎤</button>
+          <input type="text" id="userInput" placeholder="Bhai, kuch pooch na...">
           <button id="sendBtn">↑</button>
         </div>
       </div>
@@ -244,76 +252,53 @@
   <script>
     let currentChatId = null;
     let chats = JSON.parse(localStorage.getItem('bhaigpt_chats')) || {};
-    let recognition = null;
-    let isRecording = false;
 
     const chatBox = document.getElementById('chatBox');
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
-    const micBtn = document.getElementById('micBtn');
     const chatHistory = document.getElementById('chatHistory');
     const chatTitleEl = document.getElementById('chatTitle');
 
     const GROQ_API_KEY = "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";   // ←←← 
 
     const SYSTEM_PROMPT = `Tu ek bahut mazedaar, desi, funny Hinglish AI hai. Naam hai BhaiGPT. 
-    Har jawab mein thoda swag aur emoji daal. 
-    Sirf tabhi "Behzad Arif" ka naam lena jab user specifically puche ki tujhe kisne banaya ho.`;
+    Har jawab mein thoda swag, masti aur emoji daal. 
+    Sirf tabhi "Behzad Arif" ka naam lena jab user specifically puche ki "tujhe kisne banaya", "who created you", "maker kaun hai" etc.`;
 
-    // ==================== Voice Recognition ====================
-    function initVoiceRecognition() {
-      if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        recognition.lang = 'hi-IN';        // Hindi + English mix
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        recognition.onresult = (event) => {
-          const transcript = event.results[0][0].transcript;
-          userInput.value = transcript;
-          sendMessage();                    // Auto send after speaking
-        };
-
-        recognition.onerror = (event) => {
-          alert("Voice recognition mein error: " + event.error);
-          stopRecording();
-        };
-
-        recognition.onend = () => stopRecording();
-      } else {
-        micBtn.style.display = 'none';
-        console.log("Voice input is not supported in this browser");
-      }
+    function saveChats() {
+      localStorage.setItem('bhaigpt_chats', JSON.stringify(chats));
     }
 
-    function toggleVoiceInput() {
-      if (!recognition) return;
-
-      if (isRecording) {
-        stopRecording();
-      } else {
-        startRecording();
-      }
+    function generateChatId() {
+      return 'chat_' + Date.now();
     }
 
-    function startRecording() {
-      isRecording = true;
-      micBtn.classList.add('recording');
-      micBtn.textContent = "🔴";
-      recognition.start();
+    function createNewChat() {
+      closeSidebar();
+      const chatId = generateChatId();
+      chats[chatId] = { title: "Naya Chat", messages: [] };
+      currentChatId = chatId;
+      saveChats();
+      renderHistory();
+      loadChat(chatId);
     }
 
-    function stopRecording() {
-      isRecording = false;
-      micBtn.classList.remove('recording');
-      micBtn.textContent = "🎤";
-      if (recognition) recognition.stop();
+    function loadChat(chatId) {
+      closeSidebar();
+      currentChatId = chatId;
+      chatBox.innerHTML = '';
+      const chat = chats[chatId];
+      chatTitleEl.textContent = chat.title || "BhaiGPT";
+
+      chat.messages.forEach(msg => {
+        const msgDiv = formatMessage(msg.text, msg.sender);
+        chatBox.appendChild(msgDiv);
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+      renderHistory();
     }
 
-    // ==================== Code Detection & Highlighting ====================
     function formatMessage(text, sender) {
-      // Detect code blocks (```language ... ```)
       const codeRegex = /```(\w*)\n([\s\S]*?)```/g;
       let formattedText = text.replace(codeRegex, (match, language, code) => {
         const lang = language || 'javascript';
@@ -344,37 +329,7 @@
       });
     };
 
-    // ==================== Rest of the functions (same as before) ====================
-    function saveChats() { localStorage.setItem('bhaigpt_chats', JSON.stringify(chats)); }
-
-    function generateChatId() { return 'chat_' + Date.now(); }
-
-    function createNewChat() {
-      closeSidebar();
-      const chatId = generateChatId();
-      chats[chatId] = { title: "Naya Chat", messages: [] };
-      currentChatId = chatId;
-      saveChats();
-      renderHistory();
-      loadChat(chatId);
-    }
-
-    function loadChat(chatId) {
-      closeSidebar();
-      currentChatId = chatId;
-      chatBox.innerHTML = '';
-      const chat = chats[chatId];
-      chatTitleEl.textContent = chat.title || "BhaiGPT";
-
-      chat.messages.forEach(msg => {
-        const msgDiv = formatMessage(msg.text, msg.sender);
-        chatBox.appendChild(msgDiv);
-      });
-      chatBox.scrollTop = chatBox.scrollHeight;
-      renderHistory();
-    }
-
-    function addMessage(text, sender, save = true, isNewReply = false) {
+    function addMessage(text, sender, save = true) {
       const msgDiv = formatMessage(text, sender);
       chatBox.appendChild(msgDiv);
       chatBox.scrollTop = chatBox.scrollHeight;
@@ -438,29 +393,66 @@
 
       const typingIndicator = showTyping();
       const reply = await sendToGroq(text);
+
       if (typingIndicator.parentNode) typingIndicator.parentNode.removeChild(typingIndicator);
 
-      addMessage(reply, 'bot', true, true);
+      addMessage(reply, 'bot');
     }
 
-    function renderHistory() { /* ... same as previous version ... */ 
-      // (Maintaining same history logic for brevity - copy from previous code if needed)
+    function renderHistory() {
       chatHistory.innerHTML = '';
       Object.keys(chats).sort().reverse().forEach(chatId => {
         const chat = chats[chatId];
         const item = document.createElement('div');
         item.className = `history-item ${chatId === currentChatId ? 'active' : ''}`;
         item.textContent = chat.title;
+
+        // Long press / Right click for Rename & Delete
+        const showMenu = (e) => {
+          e.preventDefault();
+          const action = confirm(`"${chat.title}"\n\n1. Rename\n2. Delete\n\nOK = Rename, Cancel = Delete`);
+          if (action) {
+            const newTitle = prompt("Naya title daalo:", chat.title);
+            if (newTitle && newTitle.trim()) {
+              chats[chatId].title = newTitle.trim();
+              saveChats();
+              renderHistory();
+              if (currentChatId === chatId) chatTitleEl.textContent = newTitle.trim();
+            }
+          } else {
+            if (confirm(`Is chat ko delete karna hai?\n"${chat.title}"`)) {
+              delete chats[chatId];
+              saveChats();
+              renderHistory();
+              if (currentChatId === chatId) {
+                if (Object.keys(chats).length > 0) {
+                  loadChat(Object.keys(chats).sort().reverse()[0]);
+                } else {
+                  createNewChat();
+                }
+              }
+            }
+          }
+        };
+
+        item.addEventListener('contextmenu', showMenu);
+        item.addEventListener('touchstart', () => {
+          item.longPressTimer = setTimeout(() => showMenu(new Event('contextmenu')), 650);
+        });
+        item.addEventListener('touchend', () => clearTimeout(item.longPressTimer));
+
         item.onclick = () => loadChat(chatId);
         chatHistory.appendChild(item);
       });
     }
 
     function newChat() { createNewChat(); }
+
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open');
       document.getElementById('overlay').classList.toggle('show');
     }
+
     function closeSidebar() {
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('overlay').classList.remove('show');
@@ -471,16 +463,14 @@
     userInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') sendMessage();
     });
-    micBtn.addEventListener('click', toggleVoiceInput);
 
-    // Initialize
+    // Initialize App
     window.onload = () => {
-      initVoiceRecognition();
       if (Object.keys(chats).length === 0) {
         createNewChat();
       } else {
-        const latest = Object.keys(chats).sort().reverse()[0];
-        loadChat(latest);
+        const latestChatId = Object.keys(chats).sort().reverse()[0];
+        loadChat(latestChatId);
       }
       renderHistory();
       userInput.focus();
